@@ -2,6 +2,8 @@
   "name": "obdsmartfleetmeg",
   "private": true,
   "scripts": {
+    "predev": "node sync-envs.js",
+    "prebuild": "node sync-envs.js",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
