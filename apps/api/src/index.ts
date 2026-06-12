@@ -1,10 +1,9 @@
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
-import * as dotenv from "dotenv";
+import { authRoutes } from "./modules/auth/auth.routes.js";
 
-// Load environment variables
-dotenv.config();
 
 const server = Fastify({
   logger: true,
@@ -17,6 +16,10 @@ await server.register(cors, {
 
 await server.register(jwt, {
   secret: process.env.JWT_SECRET || "super-secret-key-change-me-in-production",
+});
+
+await server.register(authRoutes, {
+  prefix: "/auth",
 });
 
 // Health check route
