@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -12,9 +7,265 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
+model alerts {
+  id              String        @id @db.Uuid
+  organisation_id String        @db.Uuid
+  vehicle_id      String        @db.Uuid
+  alert_type      String        @db.VarChar(60)
+  severity        String        @db.VarChar(10)
+  message         String
+  signal_snapshot Json?
+  status          String        @db.VarChar(15)
+  acknowledged_by String?       @db.Uuid
+  acknowledged_at DateTime?     @db.Timestamptz(6)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  users           users?        @relation(fields: [acknowledged_by], references: [id])
+  organisations   organisations @relation(fields: [organisation_id], references: [id], onDelete: Cascade)
+  vehicles        vehicles      @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+}
+
+model coaching_templates {
+  id            String       @id @db.Uuid
+  event_type    String       @db.VarChar(60)
+  severity_band SeverityBand
+  coaching_text String
+  language      LanguageCode @default(EN)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model dpf_regen_events {
+  id          String           @id @db.Uuid
+  vehicleId   String           @db.Uuid
+  time        DateTime         @db.Timestamptz(6)
+  triggeredBy RegenTriggerType
+  preSootPct  Float
+  postSootPct Float?
+  durationS   Int
+  success     Boolean
+  createdAt   DateTime         @default(now())
+  vehicles    vehicles         @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([time])
+  @@index([vehicleId])
+}
+
+model drivers {
+  id                                             String        @id @db.Uuid
+  organisation_id                                String        @db.Uuid
+  name                                           String        @db.VarChar(200)
+  phone                                          String        @db.VarChar(20)
+  licence_number                                 String?       @db.VarChar(30)
+  assigned_vehicle_id                            String?       @db.Uuid
+  created_at                                     DateTime      @default(now()) @db.Timestamptz(6)
+  vehicles_drivers_assigned_vehicle_idTovehicles vehicles?     @relation("drivers_assigned_vehicle_idTovehicles", fields: [assigned_vehicle_id], references: [id])
+  organisations                                  organisations @relation(fields: [organisation_id], references: [id], onDelete: Cascade)
+  trips                                          trips[]
+  vehicles_vehicles_assigned_driver_idTodrivers  vehicles[]    @relation("vehicles_assigned_driver_idTodrivers")
+}
+
+model dtc_history {
+  id              String    @id @db.Uuid
+  vehicle_id      String    @db.Uuid
+  trip_id         String?   @db.Uuid
+  dtc_code        String    @db.VarChar(20)
+  protocol        String    @db.VarChar(10)
+  status          String    @db.VarChar(10)
+  severity        String    @db.VarChar(10)
+  description     String?
+  signal_snapshot Json?
+  first_seen_at   DateTime  @db.Timestamptz(6)
+  cleared_at      DateTime? @db.Timestamptz(6)
+  trips           trips?    @relation(fields: [trip_id], references: [id])
+  vehicles        vehicles  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+}
+
+model fuelling_stations {
+  id             String         @id @db.Uuid
+  organisationId String?        @db.Uuid
+  name           String         @db.VarChar(200)
+  lat            Float
+  lng            Float
+  radius_m       Int            @default(100)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime
+  organisations  organisations? @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model geofences {
+  id             String        @id @db.Uuid
+  organisationId String        @db.Uuid
+  name           String        @db.VarChar(100)
+  polygonPoints  Json
+  speedLimitKph  Int?          @db.SmallInt
+  alertOnEntry   Boolean       @default(true)
+  alertOnExit    Boolean       @default(true)
+  type           GeofenceType  @default(DEPOT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime
+  organisations  organisations @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+}
+
+model health_flag_actions {
+  flag_code          String           @id @db.VarChar(60)
+  recommended_action String
+  urgency_days       Int              @db.SmallInt
+  component          VehicleComponent
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime
+}
+
+model maintenance_records {
+  id                    String    @id @db.Uuid
+  vehicle_id            String    @db.Uuid
+  service_type          String    @db.VarChar(100)
+  description           String?
+  cost_inr              Decimal?  @db.Decimal(10, 2)
+  odometer_at_service   Int?
+  service_date          DateTime  @db.Date
+  next_service_due_km   Int?
+  next_service_due_date DateTime? @db.Date
+  workshop_name         String?   @db.VarChar(200)
+  created_by            String    @db.Uuid
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  users                 users     @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  vehicles              vehicles  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model organisations {
+  id                String              @id @db.Uuid
+  name              String              @db.VarChar(200)
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  plan              String              @db.VarChar(20)
+  vehicle_limit     Int
+  alerts            alerts[]
+  drivers           drivers[]
+  fuelling_stations fuelling_stations[]
+  geofences         geofences[]
+  users             users[]
+  vehicles          vehicles[]
+}
+
+model trips {
+  id                String        @id @db.Uuid
+  vehicle_id        String        @db.Uuid
+  driver_id         String?       @db.Uuid
+  start_time        DateTime      @db.Timestamptz(6)
+  end_time          DateTime?     @db.Timestamptz(6)
+  start_lat         Float
+  start_lng         Float
+  end_lat           Float?
+  end_lng           Float?
+  distance_km       Float?        @db.Real
+  fuel_consumed_l   Float?        @db.Real
+  idle_duration_s   Int?
+  max_speed_kph     Int?          @db.SmallInt
+  harsh_accel_count Int?          @db.SmallInt
+  harsh_brake_count Int?          @db.SmallInt
+  driver_score      Int?          @db.SmallInt
+  sync_status       String        @db.VarChar(10)
+  dtc_history       dtc_history[]
+  drivers           drivers?      @relation(fields: [driver_id], references: [id])
+  vehicles          vehicles      @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+}
+
+model users {
+  id                  String                @id @db.Uuid
+  organisation_id     String                @db.Uuid
+  name                String                @db.VarChar(200)
+  email               String                @unique @db.VarChar(320)
+  phone               String                @db.VarChar(20)
+  password_hash       String
+  role                String                @db.VarChar(20)
+  refresh_token_hash  String?
+  fcm_token           String?
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  alerts              alerts[]
+  maintenance_records maintenance_records[]
+  organisations       organisations         @relation(fields: [organisation_id], references: [id], onDelete: Cascade)
+}
+
+model vehicle_status_log {
+  time      DateTime      @db.Timestamptz(6)
+  vehicleId String        @db.Uuid
+  status    VehicleStatus
+  vehicles  vehicles      @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@id([time, vehicleId])
+  @@index([status])
+  @@index([vehicleId])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model vehicles {
+  id                                            String                @id @db.Uuid
+  assigned_driver_id                            String?               @db.Uuid
+  calibration_id                                String?               @db.VarChar(50)
+  created_at                                    DateTime              @default(now()) @db.Timestamptz(6)
+  ecu_hw_number                                 String?               @db.VarChar(50)
+  ecu_sw_number                                 String?               @db.VarChar(50)
+  make                                          String                @db.VarChar(80)
+  model                                         String                @db.VarChar(80)
+  mqtt_password_hash                            String
+  odometer_at_onboarding                        Int?
+  organisation_id                               String                @db.Uuid
+  protocol_profile                              Json?
+  registration_number                           String                @db.VarChar(20)
+  vehicle_type                                  String                @db.VarChar(30)
+  vin                                           String                @db.VarChar(17)
+  year                                          Int?                  @db.SmallInt
+  alerts                                        alerts[]
+  dpf_regen_events                              dpf_regen_events[]
+  drivers_drivers_assigned_vehicle_idTovehicles drivers[]             @relation("drivers_assigned_vehicle_idTovehicles")
+  dtc_history                                   dtc_history[]
+  maintenance_records                           maintenance_records[]
+  trips                                         trips[]
+  vehicle_status_log                            vehicle_status_log[]
+  drivers_vehicles_assigned_driver_idTodrivers  drivers?              @relation("vehicles_assigned_driver_idTodrivers", fields: [assigned_driver_id], references: [id])
+  organisations                                 organisations         @relation(fields: [organisation_id], references: [id], onDelete: Cascade)
+}
+
+enum GeofenceType {
+  DEPOT
+  RESTRICTED
+  SPEED_ZONE
+  FUEL_STATION
+}
+
+enum LanguageCode {
+  EN
+  HI
+  MR
+  TA
+}
+
+enum RegenTriggerType {
+  PASSIVE
+  ACTIVE
+  FORCED
+}
+
+enum SeverityBand {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum VehicleComponent {
+  DPF
+  BATTERY
+  COOLING
+  INJECTOR
+  SCR
+  TURBO
+}
+
+enum VehicleStatus {
+  ONLINE
+  OFFLINE
 }
